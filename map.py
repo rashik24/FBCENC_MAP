@@ -25,17 +25,17 @@ geocoder = OpenCageGeocode(OPENCAGE_API_KEY)
 st.set_page_config(page_title="Open Food Pantries", layout="wide")
 st.title("Open Food Pantries Finder")
 
-# ─── USER INPUT ──────────────────────────────────────────────────────────
-
 use_zip = st.checkbox("Use ZIP code instead of full address")
 
+# ZIP-BASED LOGIC
 if use_zip:
     input_zip = st.text_input("Enter your ZIP code (e.g., 27606):")
 
     if input_zip:
         odm_df = pd.read_csv(ODM_CSV)
         odm_df.columns = odm_df.columns.str.strip().str.lower()
-        odm_df["zip"] = odm_df["zip"].astype(str).str.zfill(5)  # Normalize ZIP
+        odm_df["zip"] = odm_df["zip"].astype(str).str.zfill(5)
+
         agencies_nearby = odm_df[odm_df["zip"] == input_zip]
 
         if agencies_nearby.empty:
@@ -43,6 +43,10 @@ if use_zip:
             st.stop()
         else:
             st.success(f"Found {len(agencies_nearby)} agencies in ZIP {input_zip}")
+
+        # Continue to apply filters to `agencies_nearby` below (skip GEOID/travel time filtering)
+
+# ADDRESS-BASED LOGIC
 else:
     user_address = st.text_input("Enter your address (e.g., 123 Main St, Raleigh, NC):")
 
@@ -86,6 +90,7 @@ else:
         if agencies_nearby.empty:
             st.warning("No agencies directly linked to your tract. Showing agencies within 60-minute travel time.")
             agencies_nearby = odm_df[odm_df["total_traveltime"] <= 60]
+
 
 
 if user_address:
