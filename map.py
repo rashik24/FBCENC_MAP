@@ -27,9 +27,66 @@ st.title("Open Food Pantries Finder")
 
 # ─── USER INPUT ──────────────────────────────────────────────────────────
 
-user_address = st.text_input(
-    "Enter your address (e.g. 123 Main St, Raleigh, NC):"
-)
+use_zip = st.checkbox("Use ZIP code instead of full address")
+
+if use_zip:
+    input_zip = st.text_input("Enter your ZIP code (e.g., 27606):")
+
+    if input_zip:
+        odm_df = pd.read_csv(ODM_CSV)
+        odm_df.columns = odm_df.columns.str.strip().str.lower()
+        odm_df["zip"] = odm_df["zip"].astype(str).str.zfill(5)  # Normalize ZIP
+        agencies_nearby = odm_df[odm_df["zip"] == input_zip]
+
+        if agencies_nearby.empty:
+            st.warning("No agencies found for the entered ZIP code.")
+            st.stop()
+        else:
+            st.success(f"Found {len(agencies_nearby)} agencies in ZIP {input_zip}")
+else:
+    user_address = st.text_input("Enter your address (e.g., 123 Main St, Raleigh, NC):")
+
+    if user_address:
+        try:
+            results = geocoder.geocode(user_address)
+            if results:
+                user_lat = results[0]["geometry"]["lat"]
+                user_lon = results[0]["geometry"]["lng"]
+                st.success(f"Geocoded location: {user_lat:.5f}, {user_lon:.5f}")
+            else:
+                st.error("Could not geocode your address.")
+                st.stop()
+        except Exception as e:
+            st.error(f"Geocoding error: {e}")
+            st.stop()
+
+        odm_df = pd.read_csv(ODM_CSV)
+        odm_df.columns = odm_df.columns.str.strip().str.lower()
+        odm_df["geoid"] = odm_df["geoid"].astype(int)
+
+        tracts_gdf = gpd.read_file(TRACTS_SHP).to_crs(epsg=4326)
+        if tracts_gdf["GEOID"].dtype == object:
+            tracts_gdf["GEOID"] = tracts_gdf["GEOID"].astype(int)
+
+        user_point = Point(user_lon, user_lat)
+        matched_tract = tracts_gdf[tracts_gdf.contains(user_point)]
+
+        if not matched_tract.empty:
+            user_geoid = matched_tract.iloc[0]["GEOID"]
+            st.success(f"Matched your location to GEOID {user_geoid}")
+        else:
+            st.error("Could not match your location to a census tract.")
+            st.stop()
+
+        agencies_nearby = odm_df[
+            (odm_df["geoid"] == user_geoid) &
+            (odm_df["total_traveltime"] <= 20)
+        ]
+
+        if agencies_nearby.empty:
+            st.warning("No agencies directly linked to your tract. Showing agencies within 60-minute travel time.")
+            agencies_nearby = odm_df[odm_df["total_traveltime"] <= 60]
+
 
 if user_address:
     try:
